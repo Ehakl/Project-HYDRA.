@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Hydra Snipper",
+  "version": "1.0",
+  "description": "Save web snippets directly to your Hydra Document Core.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "host_permissions": [
+    "http://localhost/*"
+  ]
+}

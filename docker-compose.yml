@@ -1,0 +1,106 @@
+services:
+  mysql_db:
+    image: mysql:8.0
+    container_name: hydra-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: hydra_auth
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 5
+
+  mongo_db:
+    image: mongo:6.0
+    container_name: hydra-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis_cache:
+    image: redis:alpine
+    container_name: hydra-redis
+    ports:
+      - "6379:6379"
+
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: hydra-auth
+    ports:
+      - "5000:5000"
+    environment:
+      - MYSQL_HOST=mysql_db
+      - MYSQL_PASSWORD=rootpass
+      - REDIS_URL=redis://redis_cache:6379
+      - JWT_SECRET=SuperSecretKey2026
+    depends_on:
+      mysql_db:
+        condition: service_healthy
+      redis_cache:
+        condition: service_started
+    volumes:
+      - ./backend/auth-service:/app
+      - /app/node_modules
+
+  doc-service:
+    build:
+      context: ./backend/doc-service
+      dockerfile: Dockerfile
+    container_name: hydra-doc
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://mongo_db:27017
+      - REDIS_URL=redis://redis_cache:6379
+      - JWT_SECRET=SuperSecretKey2026
+    depends_on:
+      - mongo_db
+      - redis_cache
+    volumes:
+      - ./backend/doc-service:/app
+
+  search-service:
+    build:
+      context: ./backend/search-service
+      dockerfile: Dockerfile
+    container_name: hydra-search
+    ports:
+      - "5001:5001"
+    environment:
+      - REDIS_URL=redis://redis_cache:6379
+    depends_on:
+      - redis_cache
+    volumes:
+      - ./backend/search-service:/app
+
+  frontend:
+    build: ./frontend
+    container_name: hydra-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - auth-service
+
+  ai-service:
+    build: ./frontend/ai-service
+    container_name: hydra-ai
+    ports:
+      - "8001:8000"
+    environment:
+      - MONGO_URI=mongodb://mongo_db:27017
+      - GEMINI_API_KEY=your_gemini_api_key_here
+    depends_on:
+      - mongo_db
+    volumes:
+      - ./frontend/ai-service:/app
+
+volumes:
+  mysql_data:
+  mongo_data:
