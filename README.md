@@ -92,5 +92,5 @@ docker compose up --build
 
 | Service | URL |
 | --- | --- |
-| Frontend Application | [http://localhost:5173](http://localhost:5173) |
-| API Gateway | [http://localhost:3000](http://localhost:3000) |
+| Frontend Application | [http://localhost:80](http://localhost:80) |
+| API Gateway | [http://localhost:5000](http://localhost:5000) |
