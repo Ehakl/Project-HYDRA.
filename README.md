@@ -1,0 +1,96 @@
+# 🌊 Project Hydra: Distributed Document Intelligence Platform
+
+## Overview
+Project Hydra is a production-grade, polyglot microservices platform for document management, real-time collaboration, and AI-powered semantic search. Built with a focus on scalability, fault tolerance, and clean architecture.
+
+## Architecture Diagram
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                CLIENT LAYER                                 │
+│  ┌──────────────┐    ┌──────────────────┐    ┌───────────────────────────┐  │
+│  │  React SPA   │    │ Chrome Extension │    │  (Future) Mobile App      │  │
+│  │  (Vite)      │    │  (Manifest V3)   │    │  (Kotlin)                 │  │
+│  └──────┬───────┘    └────────┬─────────┘    └─────────────┬─────────────┘  │
+└─────────┼─────────────────────┼────────────────────────────┼────────────────┘
+          │                     │                            │
+          └─────────────────────┼────────────────────────────┘
+                                │ HTTPS / WSS
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         API GATEWAY (Node.js + Express)                     │
+│  - JWT Authentication & Authorization (bcrypt, jsonwebtoken)                │
+│  - Reverse Proxy (http-proxy-middleware)                                    │
+│  - WebSocket Server (ws) for real-time push notifications                   │
+│  - MySQL (Users) | Redis (Session Cache & Pub/Sub Broker)                   │
+└──────────────┬──────────────────────┬──────────────────────┬────────────────┘
+               │                      │                      │
+               ▼                      ▼                      ▼
+┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│  DOCUMENT SERVICE    │  │   SEARCH SERVICE     │  │     AI SERVICE       │
+│  (FastAPI + Python)  │  │   (Flask + Python)   │  │  (FastAPI + Python)  │
+│  - File Uploads      │  │  - Inverted Index    │  │  - EasyOCR (Text)    │
+│  - Async I/O (Motor) │  │  - SQLite Queries    │  │  - FAISS (Vectors)   │
+│  - MongoDB           │  │  - SQLite            │  │  - Gemini API (RAG)  │
+└──────────────────────┘  └──────────────────────┘  └──────────────────────┘
+```
+
+## Tech Stack & Polyglot Architecture
+
+| Layer | Technologies | Primary Purpose |
+| --- | --- | --- |
+| Frontend | React, Vite, Axios, Context API, Chrome Extension (Manifest V3) | User interface, browser integration, and global state management |
+| API Gateway | Node.js, Express, JWT, bcrypt, `http-proxy-middleware`, `ws` | Authentication, routing, reverse proxying, and real-time WebSockets |
+| Document Service | Python, FastAPI, Motor, MongoDB | Asynchronous document uploads, processing, and storage |
+| Search Service | Python, Flask, SQLite | Document indexing and full-text search operations |
+| AI Service | Python, FastAPI, EasyOCR, FAISS, Gemini API | OCR text extraction, embeddings, vector search, and RAG |
+| Databases and Caches | MySQL, MongoDB, SQLite, Redis | Structured data, document storage, indexing, sessions, and pub/sub |
+| DevOps | Docker, Docker Compose, Git, GitHub | Containerization, orchestration, and version control |
+
+## Key Features
+
+- **Stateless Authentication:** Centralized JWT verification at the API Gateway.
+- **Real-Time Push Notifications:** WebSockets with Redis Pub/Sub brokers.
+- **Asynchronous Document Pipelines:** Non-blocking file processing with FastAPI.
+- **Semantic Vector Search:** RAG workflow combining EasyOCR, FAISS, and the Gemini API.
+- **Multi-Container Orchestration:** Single-command local environment execution with Docker Compose.
+
+## Getting Started
+
+### Prerequisites
+
+Make sure the following tools are installed locally:
+
+- Docker Desktop, running
+- Git
+
+### Environment Setup
+
+Create a `.env` file in the repository root. Do not commit this file to version control.
+
+```env
+MYSQL_ROOT_PASSWORD=your_mysql_password
+JWT_SECRET=your_jwt_secret_key
+GEMINI_API_KEY=your_gemini_api_key
+```
+
+### Running the Application
+
+Clone the repository:
+
+```bash
+git clone https://github.com/Ehakl/Project-HYDRA..git
+cd Project-HYDRA
+```
+
+Build and launch all microservices with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+### Service URLs
+
+| Service | URL |
+| --- | --- |
+| Frontend Application | [http://localhost:5173](http://localhost:5173) |
+| API Gateway | [http://localhost:3000](http://localhost:3000) |
