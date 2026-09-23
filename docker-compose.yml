@@ -89,7 +89,7 @@ services:
       - auth-service
 
   ai-service:
-    build: ./frontend/ai-service
+    build: ./ai-service
     container_name: hydra-ai
     ports:
       - "8001:8000"
@@ -99,7 +99,7 @@ services:
     depends_on:
       - mongo_db
     volumes:
-      - ./frontend/ai-service:/app
+      - ./ai-service:/app
 
 volumes:
   mysql_data:

@@ -76,31 +76,9 @@ async def upload_document(
     return {"id": doc_id, "message": "Document uploaded successfully"}
 
 # --- LIST DOCUMENTS FOR CURRENT USER ---
+import json
+
 @app.get("/documents", response_model=list[DocumentResponse])
-async def list_documents(x_user_id: str = Header(...)):
-    try:
-        user_id = int(x_user_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid user ID")
-
-    # Query MongoDB for documents belonging to this user
-    cursor = documents_collection.find({"user_id": user_id}).sort("created_at", -1).limit(50)
-    
-    docs = []
-    async for doc in cursor:
-        docs.append(DocumentResponse(
-            id=str(doc["_id"]),
-            title=doc["title"],
-            content=doc.get("content"),
-            user_id=doc["user_id"],
-            created_at=doc["created_at"]
-        ))
-    
-    return docs
-
-    # ... existing imports ...
-
-@app.get("/documents")
 async def list_documents(x_user_id: str = Header(...)):
     try:
         user_id = int(x_user_id)
@@ -113,21 +91,29 @@ async def list_documents(x_user_id: str = Header(...)):
     
     if cached_docs:
         # Redis returns bytes, so we decode and parse it back to JSON
-        import json
         return json.loads(cached_docs)
 
     # --- IF NOT CACHED, QUERY DB ---
     cursor = documents_collection.find({"user_id": user_id}).sort("created_at", -1).limit(50)
+    
     docs = []
     async for doc in cursor:
         docs.append({
             "id": str(doc["_id"]),
             "title": doc["title"],
-            "filename": doc.get("filename"),
-            "created_at": doc["created_at"].isoformat()
+            "content": doc.get("content"),
+            "user_id": doc["user_id"],
+            "created_at": doc["created_at"]
         })
 
     # --- STORE IN CACHE FOR 60 SECONDS ---
-    await redis.setex(cache_key, 60, json.dumps(docs))
+    # Need to convert datetime to isoformat for caching, but for response, DocumentResponse handles datetime
+    class DateTimeEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if hasattr(obj, 'isoformat'):
+                return obj.isoformat()
+            return super().default(obj)
+            
+    await redis.setex(cache_key, 60, json.dumps(docs, cls=DateTimeEncoder))
     
     return docs

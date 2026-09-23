@@ -19,15 +19,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     try {
-      // We send a JSON payload to the Gateway. 
-      // Note: For JSON, we must use application/json, NOT multipart/form-data.
+      // Send document via FormData as expected by the FastAPI backend
+      const formData = new FormData();
+      formData.append('title', title);
+      const blob = new Blob([content], { type: 'text/plain' });
+      formData.append('file', blob, 'document.txt');
+
       const res = await fetch('http://localhost/api/docs/documents', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token.hydra_token}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${token.hydra_token}`
         },
-        body: JSON.stringify({ title, content })
+        body: formData
       });
 
       if (res.ok) {
