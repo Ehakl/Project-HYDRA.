@@ -1,4 +1,4 @@
-# 🌊 Project Hydra: Distributed Document Intelligence Platform
+# 🌊 Project Hydra: Distributed Document Intelligence & Real-Time Notification Platform.
 
 ## Overview
 Project Hydra is a production-grade, polyglot microservices platform for document management, real-time collaboration, and AI-powered semantic search. Built with a focus on scalability, fault tolerance, and clean architecture.
