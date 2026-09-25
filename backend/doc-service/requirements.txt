@@ -6,3 +6,4 @@ pydantic==2.5.0
 httpx==0.25.1
 python-multipart==0.0.6
 pymongo==4.9.2
+pypdf==5.4.0

@@ -22,22 +22,31 @@ def index():
     doc_id = data.get('doc_id')
     title = data.get('title')
     content = data.get('content')
+    try:
+        user_id = int(request.headers.get('x-user-id', ''))
+    except ValueError:
+        return jsonify({"error": "A valid user identity is required"}), 401
 
     if not doc_id or not title:
         return jsonify({"error": "doc_id and title are required"}), 400
 
     # Insert into SQLite
-    index_document(doc_id, title, content)
+    index_document(doc_id, title, content, user_id)
     return jsonify({"status": "indexed", "doc_id": doc_id}), 201
 
 # --- SEARCH ENDPOINT (Called by React via Gateway) ---
+@app.route('/', methods=['GET'])
 @app.route('/search', methods=['GET'])
 def search():
     query = request.args.get('q', '')
+    try:
+        user_id = int(request.headers.get('x-user-id', ''))
+    except ValueError:
+        return jsonify({"error": "A valid user identity is required"}), 401
     if not query:
         return jsonify([])
     
-    results = search_documents(query)
+    results = search_documents(query, user_id)
     return jsonify(results)
 
 if __name__ == '__main__':

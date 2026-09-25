@@ -35,7 +35,9 @@ export default function Login() {
       if (isRegister) {
         setVerificationStep(true);
         setDevCode(res.data.devVerificationCode || '');
-        setNotice(`We sent a six-digit code to ${email}.`);
+        setNotice(res.data.devVerificationCode
+          ? 'Email delivery is not configured. Use the development code shown below.'
+          : `A verification email was sent to ${email}.`);
       } else {
         login(res.data.token, res.data.user);
       }
@@ -49,7 +51,9 @@ export default function Login() {
     try {
       const res = await api.post('/auth/resend-verification', { email });
       setDevCode(res.data.devVerificationCode || '');
-      setNotice('A new verification code was sent.');
+      setNotice(res.data.devVerificationCode
+        ? 'Email delivery is not configured. Use the new development code below.'
+        : 'A new verification email was sent.');
     } catch (err) {
       setError(err.response?.data?.error || 'Unable to resend the code');
     }
@@ -66,19 +70,19 @@ export default function Login() {
   return (
     <div className="auth-layout">
       <section className="auth-intro">
-        <span className="eyebrow">Document intelligence, distilled</span>
-        <h1>Make every document<br /><em>work harder.</em></h1>
-        <p>Hydra brings your files, search, and AI tools into one calm workspace built for getting to the useful part faster.</p>
+        <span className="eyebrow">Environmental sample operations</span>
+        <h1>Keep every sample<br /><em>traceable.</em></h1>
+        <p>Bring field sheets, custody records, and laboratory results into one evidence desk built for small environmental testing teams.</p>
         <div className="signal-list">
-          <span><b>01</b> Search across your library</span>
-          <span><b>02</b> Extract insight with AI</span>
-          <span><b>03</b> Keep your work in motion</span>
+          <span><b>01</b> Link records to sample IDs</span>
+          <span><b>02</b> Spot missing custody or results</span>
+          <span><b>03</b> Review answers against source records</span>
         </div>
       </section>
       <section className="auth-card">
         <span className="eyebrow">Your workspace</span>
         <h2>{verificationStep ? 'Confirm your email' : isRegister ? 'Create your account' : 'Welcome back'}</h2>
-        <p className="form-lede">{verificationStep ? 'Enter the code from your inbox to activate your workspace.' : isRegister ? 'Start building a smarter document library.' : 'Sign in to continue where you left off.'}</p>
+        <p className="form-lede">{verificationStep ? 'Enter the six-digit verification code to activate your workspace.' : isRegister ? 'Create a private evidence desk for your team.' : 'Sign in to continue your sample review.'}</p>
       {error && <p className="error">{error}</p>}
       {notice && <p className="notice">{notice}</p>}
       <form onSubmit={handleSubmit}>
@@ -90,8 +94,8 @@ export default function Login() {
         {verificationStep && <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength="6" placeholder="Six-digit code" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))} autoComplete="one-time-code" required />}
         <button className="primary-button" type="submit">{verificationStep ? 'Confirm email' : isRegister ? 'Create account' : 'Sign in'} <span>-&gt;</span></button>
       </form>
-      {devCode && <p className="dev-code">Local code: <strong>{devCode}</strong></p>}
-      {verificationStep ? <button className="text-button" onClick={resendCode}>Resend code</button> : <p onClick={switchMode} className="toggle">{isRegister ? 'Already have an account? Sign in' : 'Need an account? Create one'}</p>}
+      {devCode && <p className="dev-code"><strong>Development code (no email sent)</strong><br />{devCode}</p>}
+      {verificationStep ? <button className="text-button" type="button" onClick={resendCode}>Resend code</button> : <button className="toggle auth-mode-toggle" type="button" onClick={switchMode}>{isRegister ? 'Already have an account? Sign in' : 'Need an account? Create one'}</button>}
       </section>
     </div>
   );

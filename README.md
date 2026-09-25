@@ -54,6 +54,17 @@ Project Hydra is a production-grade, polyglot microservices platform for documen
 - **Semantic document search:** Embeddings and Gemini-powered assistance for finding useful context.
 - **Multi-Container Orchestration:** Single-command local environment execution with Docker Compose.
 
+## Sample Evidence Desk
+
+Hydra is tailored to small environmental testing teams that need to keep field collection records connected to laboratory results. Each evidence record can be tagged with a sample ID, site, and record type; the register groups those records and flags samples without both a chain-of-custody record and a lab report. This is a record-presence check, not a regulatory compliance determination.
+
+- Upload text, CSV, and searchable PDF records up to 20 MB and 100 PDF pages.
+- Extract scanned field sheets from images up to 10 MB; extracted text is indexed under the same sample and site.
+- Search and AI retrieval are scoped to the signed-in user's records. Assistant answers return source records and do not replace professional review.
+- The assistant requires `GEMINI_API_KEY`. Keyword search and the sample register work without it.
+
+The search service is internal to the Compose network; use the authenticated gateway rather than calling it directly.
+
 ## Getting Started
 
 ### Prerequisites
@@ -104,4 +115,19 @@ docker compose up --build
 - Login, registration, document upload, document listing, and search work without a third-party API key.
 - Smart file extraction works locally; document assistance requires `GEMINI_API_KEY`.
 - Account confirmation requires `RESEND_API_KEY` and a verified `MAIL_FROM` address in production.
+- With no `RESEND_API_KEY` and `ALLOW_DEV_VERIFICATION=true`, local registration returns a development code in the UI and sends no email. Keep this disabled in production.
 - Set `CORS_ORIGIN` to the exact public frontend origin before launch.
+
+### Focused checks
+
+Run the search ownership and migration regression tests in the Compose service image:
+
+```bash
+docker compose run --rm --no-deps search-service python -m unittest discover -s /app -p 'test_*.py'
+```
+
+Build the production frontend bundle:
+
+```bash
+npm --prefix frontend run build
+```

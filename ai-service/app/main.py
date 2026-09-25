@@ -1,9 +1,10 @@
-from fastapi import FastAPI, UploadFile, File, Header, HTTPException
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Query
+from fastapi.responses import JSONResponse
 import easyocr
 from sentence_transformers import SentenceTransformer
-import faiss
 import numpy as np
 import google.generativeai as genai
+from google.api_core.exceptions import NotFound, ResourceExhausted
 import os
 import json
 from pymongo import MongoClient
@@ -18,17 +19,11 @@ ocr_reader = easyocr.Reader(['en'], gpu=False) # Set gpu=True if you have CUDA
 print("Loading Sentence Transformer...")
 embedder = SentenceTransformer('all-MiniLM-L6-v2') # Lightweight, fast, 384-dim embeddings
 
-# --- INITIALIZE FAISS (In-memory vector database) ---
-# 384 is the dimension of the embeddings from 'all-MiniLM-L6-v2'
-dimension = 384
-index = faiss.IndexFlatL2(dimension)
-doc_id_map = {} # Maps FAISS index position to MongoDB doc_id
-
 # --- CONFIGURE GEMINI ---
 llm = None
 if gemini_api_key and gemini_api_key != "your_gemini_api_key_here":
     genai.configure(api_key=gemini_api_key)
-    llm = genai.GenerativeModel('gemini-pro')
+    llm = genai.GenerativeModel(os.getenv("GEMINI_MODEL", "gemini-flash-latest"))
 
 # --- MONGO CONNECTION ---
 mongo_client = MongoClient(os.getenv("MONGO_URI", "mongodb://mongo_db:27017"))
@@ -40,8 +35,15 @@ async def process_ocr(
     file: UploadFile = File(...),
     x_user_id: str = Header(...)
 ):
-    # 1. Read the image bytes
-    image_bytes = await file.read()
+    try:
+        user_id = int(x_user_id)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="A valid user identity is required")
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=415, detail="Choose an image file for text extraction")
+    image_bytes = await file.read(10 * 1024 * 1024 + 1)
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Images must be 10 MB or smaller")
     
     # 2. Extract text using EasyOCR
     # EasyOCR returns a list of tuples: (bbox, text, confidence)
@@ -51,66 +53,97 @@ async def process_ocr(
     if not extracted_text:
         raise HTTPException(status_code=400, detail="No text found in image")
 
-    # 3. Store the OCR result in MongoDB
-    doc_data = {
-        "title": f"OCR: {file.filename}",
-        "filename": file.filename,
-        "content": extracted_text,
-        "user_id": int(x_user_id),
-        "type": "ocr"
-    }
-    result = documents_collection.insert_one(doc_data)
-    doc_id = str(result.inserted_id)
-
-    # 4. Embed the text and add to FAISS
-    embedding = embedder.encode([extracted_text])[0]
-    index.add(np.array([embedding]).astype('float32'))
-    doc_id_map[index.ntotal - 1] = doc_id
-
-    return {"id": doc_id, "extracted_text": extracted_text}
+    return {"filename": file.filename, "extracted_text": extracted_text}
 
 @app.post("/assistant-query")
-async def rag_query(
-    query: str,
+def rag_query(
+    query: str = Query(..., min_length=2, max_length=1000),
     x_user_id: str = Header(...)
 ):
+    try:
+        user_id = int(x_user_id)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="A valid user identity is required")
+
     if llm is None:
         raise HTTPException(
             status_code=503,
-            detail="RAG is unavailable until GEMINI_API_KEY is configured"
+            detail="Document answers are unavailable until GEMINI_API_KEY is configured"
         )
 
-    # 1. Embed the user's query
-    query_embedding = embedder.encode([query])[0].astype('float32')
+    documents = documents_collection.find(
+        {"user_id": user_id, "content": {"$type": "string", "$ne": ""}},
+        {"title": 1, "content": 1, "sample_id": 1, "site_name": 1, "record_type": 1}
+    ).sort("created_at", -1).limit(200)
+    candidates = []
+    for document in documents:
+        content = str(document.get("content") or "").strip()
+        if content and content != "Binary file - content not indexed":
+            metadata = f"Sample ID: {document.get('sample_id') or 'not linked'}; site: {document.get('site_name') or 'not recorded'}; record type: {document.get('record_type', 'other')}"
+            candidates.append((document, f"{metadata}\n{content[:6000]}"))
 
-    # 2. Search FAISS for the top 3 most similar documents
-    k = 3
-    distances, indices = index.search(np.array([query_embedding]), k)
+    if not candidates:
+        return {"query": query, "answer": "No searchable evidence is in this workspace yet.", "sources": []}
 
-    # 3. Retrieve the actual text from MongoDB using the doc_id_map
-    retrieved_docs = []
-    for i in indices[0]:
-        if i != -1 and i in doc_id_map:
-            doc_id = doc_id_map[i]
-            # In a real app, you'd query MongoDB here. For speed, we'll just return the index.
-            retrieved_docs.append(f"Document {doc_id} matched.")
+    vectors = embedder.encode(
+        [query] + [content for _, content in candidates],
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=False
+    )
+    scores = vectors[1:] @ vectors[0]
+    best_indices = np.argsort(scores)[::-1][:3]
+    sources = []
+    context_parts = []
+    for source_number, candidate_index in enumerate(best_indices, start=1):
+        document, content = candidates[int(candidate_index)]
+        source_id = str(document["_id"])
+        label = f"E{source_number}"
+        sources.append({
+            "id": source_id,
+            "label": label,
+            "title": document.get("title", "Untitled evidence"),
+            "sample_id": document.get("sample_id"),
+            "site_name": document.get("site_name"),
+            "record_type": document.get("record_type", "other"),
+            "relevance": round(float(scores[candidate_index]), 3),
+            "excerpt": content[:600]
+        })
+        context_parts.append(f"[{label}] {document.get('title', 'Untitled evidence')}\n{content[:3000]}")
 
-    # 4. Construct the RAG prompt
-    context = "\n".join(retrieved_docs)
+    context = "\n\n".join(context_parts)
     prompt = f"""
-    You are a helpful assistant. Use the following context to answer the user's question.
-    If the answer is not in the context, say "I don't know."
+    You help environmental testing teams review their own sample evidence.
+    Answer only from the evidence below. If it does not support an answer, say so.
+    Cite each factual statement with its evidence label, such as [E1].
+    Do not claim that records establish regulatory compliance or replace professional review.
     
-    Context: {context}
+    Evidence:\n{context}
     Question: {query}
     Answer:
     """
 
-    # 5. Generate the answer using Gemini
-    response = llm.generate_content(prompt)
-    
+    try:
+        response = llm.generate_content(prompt)
+    except ResourceExhausted:
+        return JSONResponse(status_code=429, content={
+            "detail": "Gemini quota is currently exhausted. Check the API project quota or retry later.",
+            "sources": sources
+        })
+    except NotFound:
+        return JSONResponse(status_code=503, content={
+            "detail": "The configured Gemini model is unavailable. Set GEMINI_MODEL to a supported generation model.",
+            "sources": sources
+        })
+    except Exception:
+        print("[ERROR] Gemini generation failed")
+        return JSONResponse(status_code=502, content={
+            "detail": "The document assistant could not complete this request.",
+            "sources": sources
+        })
+
     return {
         "query": query,
-        "answer": response.text,
-        "sources": retrieved_docs
+        "answer": response.text or "The assistant returned no answer for the selected evidence.",
+        "sources": sources
     }

@@ -80,8 +80,6 @@ services:
       context: ./backend/search-service
       dockerfile: Dockerfile
     container_name: hydra-search
-    ports:
-      - "5001:5001"
     environment:
       - REDIS_URL=redis://redis_cache:6379
     depends_on:

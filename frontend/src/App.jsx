@@ -19,7 +19,7 @@ function App() {
       <header className="topbar">
         <a className="brand" href="/" aria-label="Hydra home">
           <span className="brand-mark">H</span>
-          <span>hydra</span>
+          <span>HYDRA</span>
         </a>
         <div className="topbar-actions">
           <button className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${darkMode ? 'light' : 'dark'} mode`} aria-pressed={darkMode}>
@@ -27,7 +27,7 @@ function App() {
             {darkMode ? 'Light mode' : 'Dark mode'}
           </button>
           {token && (
-            <span className="status-chip"><span className="status-dot" /> Workspace live</span>
+            <span className="status-chip"><span className="status-dot" /> Private workspace</span>
           )}
           {token && <button className="ghost-button" onClick={logout}>Sign out</button>}
         </div>
