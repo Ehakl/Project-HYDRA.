@@ -1,34 +1,68 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const { createHash, randomInt } = require('crypto');
 const pool = require('./db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'SuperSecretKey2026';
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+
+const hashCode = (code) => createHash('sha256').update(code).digest('hex');
+
+const sendVerificationEmail = async (email, code) => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    if (process.env.ALLOW_DEV_VERIFICATION === 'true') return;
+    throw new Error('Email delivery is not configured');
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: process.env.MAIL_FROM || 'Hydra <onboarding@resend.dev>',
+      to: [email],
+      subject: 'Your Hydra verification code',
+      html: `<p>Your Hydra verification code is <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>`
+    })
+  });
+
+  if (!response.ok) throw new Error(`Email provider returned ${response.status}`);
+};
+
+const createVerificationCode = () => String(randomInt(100000, 1000000));
 
 // --- REGISTER ---
 exports.register = async (req, res) => {
   const { email, password, name } = req.body;
-  
-  // Validation: Never trust the client. Always validate.
-  if (!email || !password || !name) {
-    return res.status(400).json({ error: 'Missing fields' });
+
+  if (!email || !emailPattern.test(email) || !password || !name) {
+    return res.status(400).json({ error: 'Enter a valid email, name, and password' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
   try {
-    // 1. Hash the password. Salt rounds = 10 (standard trade-off between security and speed).
     const hashedPassword = await bcrypt.hash(password, 10);
-    
-    // 2. Insert into MySQL.
+    const verificationCode = createVerificationCode();
     const [result] = await pool.query(
-      'INSERT INTO users (email, password, name) VALUES (?, ?, ?)',
-      [email, hashedPassword, name]
+      'INSERT INTO users (email, password, name, email_verified, verification_code_hash, verification_expires_at) VALUES (?, ?, ?, 0, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))',
+      [email.toLowerCase().trim(), hashedPassword, name.trim(), hashCode(verificationCode)]
     );
-    
-    res.status(201).json({ 
-      message: 'User created', 
-      userId: result.insertId 
-    });
+
+    try {
+      await sendVerificationEmail(email, verificationCode);
+    } catch (deliveryError) {
+      await pool.query('DELETE FROM users WHERE id = ?', [result.insertId]);
+      return res.status(503).json({ error: 'Email verification is not configured yet' });
+    }
+
+    const payload = { message: 'Verification code sent', userId: result.insertId, email: email.toLowerCase().trim() };
+    if (process.env.ALLOW_DEV_VERIFICATION === 'true' && !process.env.RESEND_API_KEY) {
+      payload.devVerificationCode = verificationCode;
+    }
+    res.status(201).json(payload);
   } catch (error) {
-    // MySQL throws error code 1062 for duplicate email.
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: 'Email already exists' });
     }
@@ -37,9 +71,56 @@ exports.register = async (req, res) => {
   }
 };
 
+exports.verifyEmail = async (req, res) => {
+  const email = String(req.body.email || '').toLowerCase().trim();
+  const code = String(req.body.code || '').trim();
+  if (!emailPattern.test(email) || !/^\d{6}$/.test(code)) {
+    return res.status(400).json({ error: 'Enter the six-digit verification code' });
+  }
+
+  const [rows] = await pool.query(
+    'SELECT id, verification_code_hash, verification_expires_at FROM users WHERE email = ?',
+    [email]
+  );
+  const user = rows[0];
+  if (!user || !user.verification_code_hash || new Date(user.verification_expires_at) < new Date() || hashCode(code) !== user.verification_code_hash) {
+    return res.status(400).json({ error: 'That code is invalid or expired' });
+  }
+
+  await pool.query(
+    'UPDATE users SET email_verified = 1, verification_code_hash = NULL, verification_expires_at = NULL WHERE id = ?',
+    [user.id]
+  );
+  res.json({ message: 'Email verified' });
+};
+
+exports.resendVerification = async (req, res) => {
+  const email = String(req.body.email || '').toLowerCase().trim();
+  if (!emailPattern.test(email)) return res.status(400).json({ error: 'Enter a valid email address' });
+  const verificationCode = createVerificationCode();
+  const [result] = await pool.query(
+    'UPDATE users SET verification_code_hash = ?, verification_expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE) WHERE email = ? AND email_verified = 0',
+    [hashCode(verificationCode), email]
+  );
+  if (!result.affectedRows) return res.status(404).json({ error: 'Unverified account not found' });
+  try {
+    await sendVerificationEmail(email, verificationCode);
+  } catch (error) {
+    return res.status(503).json({ error: 'Email delivery is unavailable right now' });
+  }
+  const response = { message: 'Verification code sent' };
+  if (process.env.ALLOW_DEV_VERIFICATION === 'true' && !process.env.RESEND_API_KEY) response.devVerificationCode = verificationCode;
+  res.json(response);
+};
+
 // --- LOGIN ---
 exports.login = async (req, res) => {
-  const { email, password } = req.body;
+  const email = String(req.body.email || '').toLowerCase().trim();
+  const { password } = req.body;
+
+  if (!emailPattern.test(email) || !password) {
+    return res.status(400).json({ error: 'Enter a valid email and password' });
+  }
 
   try {
     // 1. Fetch user from MySQL.
@@ -48,6 +129,10 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     const user = rows[0];
+
+    if (!user.email_verified) {
+      return res.status(403).json({ error: 'Verify your email before signing in' });
+    }
 
     // 2. Compare plaintext password with hashed password.
     const match = await bcrypt.compare(password, user.password);

@@ -3,90 +3,88 @@ import api from '../api';
 
 export default function AIDashboard() {
   const [file, setFile] = useState(null);
-  const [ocrResult, setOcrResult] = useState('');
-  const [ocrLoading, setOcrLoading] = useState(false);
+  const [extractionResult, setExtractionResult] = useState('');
+  const [extractionLoading, setExtractionLoading] = useState(false);
   
   const [query, setQuery] = useState('');
-  const [ragResult, setRagResult] = useState('');
-  const [ragLoading, setRagLoading] = useState(false);
+  const [assistantResult, setAssistantResult] = useState('');
+  const [assistantLoading, setAssistantLoading] = useState(false);
 
-  const handleOcrUpload = async (e) => {
+  const handleImageUpload = async (e) => {
     e.preventDefault();
     if (!file) return;
-    setOcrLoading(true);
-    setOcrResult('');
+    setExtractionLoading(true);
+    setExtractionResult('');
     
     const formData = new FormData();
     formData.append('file', file);
     
     try {
-      const res = await api.post('/ai/ocr', formData, {
+      const res = await api.post('/ai/extract', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setOcrResult(res.data.extracted_text);
+      setExtractionResult(res.data.extracted_text);
     } catch (err) {
-      setOcrResult('OCR failed: ' + (err.response?.data?.detail || err.message));
+      setExtractionResult('Unable to process this file: ' + (err.response?.data?.detail || err.message));
     } finally {
-      setOcrLoading(false);
+      setExtractionLoading(false);
     }
   };
 
-  const handleRagQuery = async (e) => {
+  const handleAssistantQuery = async (e) => {
     e.preventDefault();
     if (!query) return;
-    setRagLoading(true);
-    setRagResult('');
+    setAssistantLoading(true);
+    setAssistantResult('');
     
     try {
-      const res = await api.post(`/ai/rag-query?query=${encodeURIComponent(query)}`);
-      setRagResult(res.data.answer);
+      const res = await api.post(`/ai/assistant-query?query=${encodeURIComponent(query)}`);
+      setAssistantResult(res.data.answer);
     } catch (err) {
-      setRagResult('RAG failed: ' + (err.response?.data?.detail || err.message));
+      setAssistantResult('Unable to answer right now: ' + (err.response?.data?.detail || err.message));
     } finally {
-      setRagLoading(false);
+      setAssistantLoading(false);
     }
   };
 
   return (
     <div className="ai-dashboard">
-      <h2>AI Tools</h2>
+      <h2>Smart workspace</h2>
       
-      {/* OCR Section */}
       <div className="ocr-section">
-        <h3>Image OCR</h3>
-        <form onSubmit={handleOcrUpload}>
+        <h3>Extract from an image</h3>
+        <form onSubmit={handleImageUpload}>
           <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} />
-          <button type="submit" disabled={ocrLoading}>
-            {ocrLoading ? 'Extracting...' : 'Extract Text'}
+          <button type="submit" disabled={extractionLoading}>
+            {extractionLoading ? 'Processing...' : 'Extract text'}
           </button>
         </form>
-        {ocrResult && (
+        {extractionResult && (
           <div className="result-box">
-            <strong>Extracted Text:</strong>
-            <p>{ocrResult}</p>
+            <strong>Extracted content</strong>
+            <p>{extractionResult}</p>
           </div>
         )}
       </div>
 
-      {/* RAG Section */}
       <div className="rag-section">
-        <h3>Ask Your Documents (RAG)</h3>
-        <form onSubmit={handleRagQuery}>
-          <input 
+        <h3>Ask your library</h3>
+        <form onSubmit={handleAssistantQuery}>
+          <input
             type="text" 
-            placeholder="Ask a question about your documents..." 
+            placeholder="Ask a question about your documents..."
             value={query} 
             onChange={(e) => setQuery(e.target.value)} 
             required 
           />
-          <button type="submit" disabled={ragLoading}>
-            {ragLoading ? 'Thinking...' : 'Ask'}
+          <button type="submit" disabled={assistantLoading}>
+            {assistantLoading ? 'Thinking...' : 'Ask'}
           </button>
         </form>
-        {ragResult && (
+        {assistantResult && (
           <div className="result-box">
-            <strong>Answer:</strong>
-            <p>{ragResult}</p>
+            <strong>Answer</strong>
+            <p>{assistantResult}</p>
           </div>
         )}
       </div>

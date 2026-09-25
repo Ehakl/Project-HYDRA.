@@ -32,9 +32,18 @@ services:
       - MYSQL_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - REDIS_URL=redis://redis_cache:6379
       - JWT_SECRET=${JWT_SECRET}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - MAIL_FROM=${MAIL_FROM}
+      - ALLOW_DEV_VERIFICATION=false
+      - CORS_ORIGIN=${CORS_ORIGIN}
     depends_on:
       - mysql_db
       - redis_cache
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     networks:
       - hydra_net
 
@@ -74,7 +83,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - auth-service
+      auth-service:
+        condition: service_healthy
     networks:
       - hydra_net
 

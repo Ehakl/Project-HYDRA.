@@ -3,7 +3,7 @@ services:
     image: mysql:8.0
     container_name: hydra-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
       MYSQL_DATABASE: hydra_auth
     ports:
       - "3306:3306"
@@ -37,14 +37,23 @@ services:
       - "5000:5000"
     environment:
       - MYSQL_HOST=mysql_db
-      - MYSQL_PASSWORD=rootpass
+      - MYSQL_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpass}
       - REDIS_URL=redis://redis_cache:6379
-      - JWT_SECRET=SuperSecretKey2026
+      - JWT_SECRET=${JWT_SECRET:-SuperSecretKey2026}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - MAIL_FROM=${MAIL_FROM:-Hydra <onboarding@resend.dev>}
+      - ALLOW_DEV_VERIFICATION=${ALLOW_DEV_VERIFICATION:-true}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
     depends_on:
       mysql_db:
         condition: service_healthy
       redis_cache:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     volumes:
       - ./backend/auth-service:/app
       - /app/node_modules
@@ -59,7 +68,7 @@ services:
     environment:
       - MONGO_URI=mongodb://mongo_db:27017
       - REDIS_URL=redis://redis_cache:6379
-      - JWT_SECRET=SuperSecretKey2026
+      - JWT_SECRET=${JWT_SECRET:-SuperSecretKey2026}
     depends_on:
       - mongo_db
       - redis_cache
@@ -86,7 +95,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - auth-service
+      auth-service:
+        condition: service_healthy
 
   ai-service:
     build: ./ai-service
@@ -95,7 +105,7 @@ services:
       - "8001:8000"
     environment:
       - MONGO_URI=mongodb://mongo_db:27017
-      - GEMINI_API_KEY=your_gemini_api_key_here
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     depends_on:
       - mongo_db
     volumes:

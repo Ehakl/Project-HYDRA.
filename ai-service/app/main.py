@@ -9,6 +9,7 @@ import json
 from pymongo import MongoClient
 
 app = FastAPI()
+gemini_api_key = os.getenv("GEMINI_API_KEY", "")
 
 # --- INITIALIZE AI MODELS (Loaded once on startup) ---
 # EasyOCR supports 80+ languages. We'll use English for now.
@@ -24,15 +25,17 @@ index = faiss.IndexFlatL2(dimension)
 doc_id_map = {} # Maps FAISS index position to MongoDB doc_id
 
 # --- CONFIGURE GEMINI ---
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-llm = genai.GenerativeModel('gemini-pro')
+llm = None
+if gemini_api_key and gemini_api_key != "your_gemini_api_key_here":
+    genai.configure(api_key=gemini_api_key)
+    llm = genai.GenerativeModel('gemini-pro')
 
 # --- MONGO CONNECTION ---
 mongo_client = MongoClient(os.getenv("MONGO_URI", "mongodb://mongo_db:27017"))
 db = mongo_client.hydra_docs
 documents_collection = db.documents
 
-@app.post("/ocr")
+@app.post("/extract")
 async def process_ocr(
     file: UploadFile = File(...),
     x_user_id: str = Header(...)
@@ -66,11 +69,17 @@ async def process_ocr(
 
     return {"id": doc_id, "extracted_text": extracted_text}
 
-@app.post("/rag-query")
+@app.post("/assistant-query")
 async def rag_query(
     query: str,
     x_user_id: str = Header(...)
 ):
+    if llm is None:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG is unavailable until GEMINI_API_KEY is configured"
+        )
+
     # 1. Embed the user's query
     query_embedding = embedder.encode([query])[0].astype('float32')
 
