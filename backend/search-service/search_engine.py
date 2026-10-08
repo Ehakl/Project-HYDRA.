@@ -57,22 +57,25 @@ def index_document(doc_id, title, content, user_id):
         conn.commit()
 
 def search_documents(query, user_id):
-    """Performs a basic keyword search (LIKE query)."""
+    """Performs a multi-keyword search."""
     if not query:
         return []
     
-    # Clean the user's search query
     clean_query = clean_text(query)
     if not clean_query:
         return []
     
+    keywords = clean_query.split()
+    if not keywords:
+        return []
+        
+    # Build a query that requires ALL keywords to be present (AND)
+    conditions = " AND ".join(["search_blob LIKE ?"] * len(keywords))
+    params = [user_id] + [f'%{kw}%' for kw in keywords]
+    
     with get_db() as conn:
-        # Search only this user's documents in both title and content.
-        # The % around the query are SQL wildcards.
-        cur = conn.execute(
-            "SELECT doc_id, title, content FROM documents WHERE user_id = ? AND search_blob LIKE ? LIMIT 20",
-            (user_id, f'%{clean_query}%')
-        )
+        sql = f"SELECT doc_id, title, content FROM documents WHERE user_id = ? AND {conditions} LIMIT 20"
+        cur = conn.execute(sql, params)
         results = []
         for row in cur:
             results.append({

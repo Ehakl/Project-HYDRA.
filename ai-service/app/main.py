@@ -46,14 +46,36 @@ async def process_ocr(
         raise HTTPException(status_code=413, detail="Images must be 10 MB or smaller")
     
     # 2. Extract text using EasyOCR
-    # EasyOCR returns a list of tuples: (bbox, text, confidence)
     results = ocr_reader.readtext(image_bytes, detail=0)
     extracted_text = " ".join(results)
     
     if not extracted_text:
         raise HTTPException(status_code=400, detail="No text found in image")
 
-    return {"filename": file.filename, "extracted_text": extracted_text}
+    # 3. Optional: Use Gemini to extract structured metadata if available
+    structured_data = {}
+    if llm:
+        try:
+            prompt = f"""
+            Extract the following information from the field notes text below.
+            Return ONLY a valid JSON object with these keys: "sample_id" and "site_name".
+            If a value is not found, leave it as an empty string. Do not include markdown formatting.
+            Text:
+            {extracted_text}
+            """
+            response = llm.generate_content(prompt)
+            # Clean up the response in case it contains markdown formatting like ```json
+            cleaned_response = response.text.replace("```json", "").replace("```", "").strip()
+            structured_data = json.loads(cleaned_response)
+        except Exception as e:
+            print(f"[WARNING] Structured extraction failed: {e}")
+
+    return {
+        "filename": file.filename, 
+        "extracted_text": extracted_text,
+        "sample_id": structured_data.get("sample_id", ""),
+        "site_name": structured_data.get("site_name", "")
+    }
 
 @app.post("/assistant-query")
 def rag_query(
