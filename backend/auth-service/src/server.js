@@ -10,8 +10,30 @@ const app = express();
 const allowedOrigins = process.env.CORS_ORIGIN || '*';
 
 // --- Middleware ---
+const rateLimit = require('express-rate-limit');
+const { RedisStore } = require('rate-limit-redis');
+const { createClient } = require('redis');
+
+// Initialize Redis for rate limiting
+const redisClient = createClient({
+  url: process.env.REDIS_URL || 'redis://redis:6379'
+});
+redisClient.connect().catch(console.error);
+
+const limiter = rateLimit({
+  store: new RedisStore({
+    sendCommand: (...args) => redisClient.sendCommand(args),
+  }),
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes' }
+});
+
 app.use(cors({ origin: allowedOrigins === '*' ? true : allowedOrigins.split(',').map((origin) => origin.trim()) }));
 app.use(express.json()); // Parses JSON request bodies.
+app.use(limiter); // Apply rate limiter to all incoming traffic
 
 // --- Public Routes (No JWT required) ---
 app.post('/auth/register', register);
