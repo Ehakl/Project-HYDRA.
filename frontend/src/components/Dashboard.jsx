@@ -53,6 +53,30 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDocs();
+
+    // Setup WebSocket for real-time updates
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${window.location.host}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'document_uploaded') {
+          fetchDocs(); // Refresh the documents list
+        }
+      } catch (e) {
+        console.error('Error parsing WebSocket message', e);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
+
+    return () => {
+      ws.close();
+    };
   }, []);
 
   const fetchDocs = async () => {

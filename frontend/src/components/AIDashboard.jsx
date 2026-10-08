@@ -30,6 +30,15 @@ export default function AIDashboard({ onEvidenceAdded }) {
     try {
       const response = await api.post('/ai/extract', formData);
       setExtractionResult(response.data.extracted_text);
+      
+      // Auto-fill extracted metadata if present and fields are currently empty
+      if (response.data.sample_id && !sampleId) {
+        setSampleId(response.data.sample_id);
+      }
+      if (response.data.site_name && !siteName) {
+        setSiteName(response.data.site_name);
+      }
+      
       setSaveError('');
     } catch (error) {
       setExtractionError(error.response?.data?.detail || 'The scan could not be processed.');

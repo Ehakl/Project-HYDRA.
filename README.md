@@ -54,12 +54,41 @@ Project Hydra is a production-grade, polyglot microservices platform for documen
 - **Semantic document search:** Embeddings and Gemini-powered assistance for finding useful context.
 - **Multi-Container Orchestration:** Single-command local environment execution with Docker Compose.
 
-## Sample Evidence Desk
+## 🌍 The Problem it Solves
+When environmental scientists collect samples (like groundwater, soil, or air quality tests), they generate a massive paper trail. A single sample requires:
 
-Hydra is tailored to small environmental testing teams that need to keep field collection records connected to laboratory results. Each evidence record can be tagged with a sample ID, site, and record type; the register groups those records and flags samples without both a chain-of-custody record and a lab report. This is a record-presence check, not a regulatory compliance determination.
+1. **Field Notes:** Handwritten observations at the site.
+2. **Chain of Custody (CoC):** Legal documents proving who handled the sample.
+3. **Lab Reports:** The final chemical analysis results.
 
+If an audit happens and a lab report is missing its matching Chain of Custody, the data becomes legally invalid. Keeping track of hundreds of samples across multiple physical papers and digital PDFs is a logistical nightmare.
+
+## 🛠️ How Hydra Works (A Quick Guide)
+Hydra acts as a central "Evidence Desk" that ingests, reads, and connects all these scattered documents automatically.
+
+### 1. Smart Data Ingestion (The AI Dashboard)
+If a technician returns from the field with a dirty, crumpled piece of paper containing their field notes, they simply take a photo of it and upload it to Hydra.
+* **What Hydra does:** The AI service uses OCR to read the text in the image. It then uses the **Gemini AI** to understand the text, automatically extracting the `Sample ID` and `Site Name`, and saving it as a digitized, searchable record.
+
+### 2. Evidence Coverage (The Sample Register)
+Users can upload their PDF Lab Reports and Chain of Custody files, typing in the Sample ID.
+* **What Hydra does:** It automatically groups records by their Sample ID. The dashboard features a "Coverage" table that instantly flags any sample that is missing its "Core Pair" (e.g., it has a Lab Report, but no Chain of Custody). This prevents incomplete packets from leaving the lab.
+
+### 3. Multi-Keyword Search
+If a manager needs to find every document related to a specific chemical (like "Benzene") at a specific site (like "North Well").
+* **What Hydra does:** They type "Benzene North Well" into the search bar. The backend search engine quickly finds and returns any document containing both keywords, highlighting a snippet of where it was found.
+
+### 4. "Ask the Records" (RAG Assistant)
+Instead of reading through 50 pages of complex PDF lab reports, a user can simply ask the AI: *"What were the VOC levels for sample GW-24-018?"*
+* **What Hydra does:** It converts the question into a mathematical vector, searches the database for the most relevant paragraphs across all documents, and then asks Gemini to read those paragraphs and formulate a direct answer. It even provides citations (e.g., `[E1]`) pointing exactly to the source document it got the answer from!
+
+## Core Capabilities
+
+- **Premium UI/UX:** A stunning, fully responsive dashboard featuring glassmorphism, depth shadows, micro-animations, and a specialized dark/light theme (Acid/Forest).
+- **Real-Time Sync:** Uploads trigger instant, page-less refreshes across connected clients using WebSockets and Redis Pub/Sub.
+- **Smart Autofill Extraction:** Using Gemini, uploaded field notes photos are scanned via OCR and analyzed by a custom LLM prompt to automatically extract and autofill the `Sample ID` and `Site Name`.
+- **Multi-Keyword Search:** A robust SQLite-powered search engine that tokenizes queries and performs multi-word AND matching for pinpoint accuracy.
 - Upload text, CSV, and searchable PDF records up to 20 MB and 100 PDF pages.
-- Extract scanned field sheets from images up to 10 MB; extracted text is indexed under the same sample and site.
 - Search and AI retrieval are scoped to the signed-in user's records. Assistant answers return source records and do not replace professional review.
 - The assistant requires `GEMINI_API_KEY`. Keyword search and the sample register work without it.
 
